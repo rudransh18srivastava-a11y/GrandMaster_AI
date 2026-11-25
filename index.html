@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GRANDMASTER AI – Chess Engine & Position Analyzer</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <b class="logo">♞ GRANDMASTER AI</b>
+  <nav><button data-v="play" class="on">Play / Analyse</button><button data-v="setup">Position Setup</button></nav>
+  <span id="status" class="pill">Loading engine…</span>
+  <button id="theme" title="Light / dark theme">◐</button>
+</header>
+
+<main id="v-play">
+  <section class="left">
+    <div class="clock" id="cb"><span>Black</span><b id="tb">--</b></div>
+    <div class="bw">
+      <div id="evbar" class="pos-w"><div id="evw"></div><i id="evl">0.00</i></div>
+      <div class="bwrap"><div id="board" class="board"></div><svg id="arrows" viewBox="0 0 8 8"></svg></div>
+    </div>
+    <div class="clock" id="cw"><span>White</span><b id="tw">--</b></div>
+    <div class="row">
+      <button id="newBtn">New game</button><button id="undoBtn">Undo</button><button id="redoBtn">Redo</button>
+      <button id="flipBtn">Flip</button><button id="resignBtn">Resign</button>
+    </div>
+    <div id="banner" class="banner hide"></div>
+    <div id="customBar" class="banner hide">
+      <b>Custom position</b>
+      <button id="cbPlay">Play from this position</button><button id="cbCont">Continue analysis</button>
+      <button id="cbChange">Change position</button><button id="cbCopy">Copy FEN</button><button id="cbExport">Export</button>
+    </div>
+    <div class="card">
+      <h3>Import / export</h3>
+      <textarea id="io" rows="3" placeholder="Paste FEN or PGN here"></textarea>
+      <div class="row"><button id="copyFen">Copy FEN</button><button id="loadFen">Load FEN</button><button id="copyPgn">Copy PGN</button><button id="loadPgn">Load PGN</button></div>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="card trio">
+      <div id="c-eng" class="tri"></div><div id="c-mat" class="tri"></div><div id="c-prac" class="tri"></div>
+      <div class="pbarwrap"><div id="pbar"></div></div>
+      <p id="cls" class="mut"></p>
+      <div id="warn" class="chips"></div>
+      <p id="advice" class="mut"></p>
+    </div>
+    <div class="card"><h3>Engine suggestions</h3><div id="lines"><p class="mut">Waiting for the engine…</p></div><div id="tac"></div></div>
+    <div class="card"><h3>Dashboard</h3><div id="dash" class="dash"></div></div>
+    <div class="card"><h3>Moves</h3><div id="moves" class="moves"></div></div>
+    <div class="card"><h3>Evaluation timeline</h3><div class="chartbox"><canvas id="chart"></canvas></div>
+      <p class="mut small">Dots: red = mistake/blunder, orange = swing of 20+ points of win probability. Hover for both clocks.</p></div>
+    <div class="card">
+      <h3>Settings</h3>
+      <div class="grid2">
+        <label>Mode<select id="mode"><option value="play">Play vs engine</option><option value="analysis">Analysis board</option></select></label>
+        <label>You play<select id="color"><option value="w">White</option><option value="b">Black</option><option value="r">Random</option></select></label>
+        <label>Engine level<select id="level">
+          <option value="beg">Beginner (500–800)</option><option value="cas">Casual (800–1200)</option><option value="int" selected>Intermediate (1200–1600)</option>
+          <option value="adv">Advanced (1600–2000)</option><option value="exp">Expert (2000–2400)</option><option value="max">Maximum strength</option></select></label>
+        <label>Time control<select id="tc">
+          <optgroup label="Bullet"><option value="1+0">1+0</option><option value="2+1">2+1</option></optgroup>
+          <optgroup label="Blitz"><option value="3+0">3+0</option><option value="3+2">3+2</option><option value="5+0" selected>5+0</option></optgroup>
+          <optgroup label="Rapid"><option value="10+0">10+0</option><option value="15+10">15+10</option></optgroup>
+          <optgroup label="Classical"><option value="30+0">30+0</option></optgroup>
+          <option value="custom">Custom…</option></select></label>
+        <label class="cust hide">Minutes<input id="cm" type="number" min="0.1" step="0.1" value="5"></label>
+        <label class="cust hide">Increment (s)<input id="ci" type="number" min="0" value="0"></label>
+      </div>
+      <p class="mut small">Level ranges are targets, not guaranteed ratings. Press “New game” to apply a time control.</p>
+    </div>
+    <div class="card"><h3>Game review</h3><button id="reviewBtn">Review game</button><div id="review"></div></div>
+  </section>
+</main>
+
+<main id="v-setup" class="hide">
+  <section class="left">
+    <div class="bwrap"><div id="edBoard" class="board"></div></div>
+    <div id="pal" class="pal"></div>
+    <p class="mut small">Click a piece, then click squares to place it. Or drag pieces from the tray or between squares. Drag a piece onto the tray to remove it.</p>
+  </section>
+  <section class="right">
+    <div class="card">
+      <h3>Edit</h3>
+      <div class="row"><button id="edClear">Clear board</button><button id="edReset">Start position</button><button id="edRemove">Remove selected</button>
+        <button id="edFlip">Flip</button><button id="edUndo">Undo</button><button id="edRedo">Redo</button></div>
+    </div>
+    <div class="card">
+      <h3>Position</h3>
+      <div class="grid2">
+        <label>Side to move<select id="edTurn"><option value="w">White</option><option value="b">Black</option></select></label>
+        <label>En passant square<input id="edEp" placeholder="e.g. e3"></label>
+        <label>Halfmove clock<input id="edHm" type="number" min="0" value="0"></label>
+        <label>Fullmove number<input id="edFm" type="number" min="1" value="1"></label>
+      </div>
+      <div class="row chk"><label><input type="checkbox" id="cK" checked> White O-O</label><label><input type="checkbox" id="cQ" checked> White O-O-O</label>
+        <label><input type="checkbox" id="ck" checked> Black O-O</label><label><input type="checkbox" id="cq" checked> Black O-O-O</label></div>
+      <input id="edFen" class="fen" spellcheck="false">
+      <div class="row"><button id="edCopy">Copy FEN</button><button id="edPaste">Paste FEN</button><button id="edFromMain">Load from main board</button></div>
+      <div class="row"><button id="edSave">Save position</button><select id="edSaved"><option value="">Saved positions…</option></select><button id="edExport">Export</button></div>
+    </div>
+    <div class="card">
+      <button id="edAnalyse" class="primary">Analyse position</button>
+      <ul id="edErr" class="err"></ul>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
