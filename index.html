@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>GRANDMASTER AI — Chess Position Analysis Engine</title>
+  <meta name="description" content="Analyse any chess position with Stockfish (WebAssembly): top four moves, evaluation bar, editable clocks. Analysis only — no opponent.">
+  <meta name="theme-color" content="#2f6fed">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f6fed'/%3E%3Cpath d='M30 12h4v8h8v4h-8v6c8 3 12 10 12 22H18c0-12 4-19 12-22v-6h-8v-4h8z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    /* set the theme before first paint to avoid a flash */
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem('gmai.settings') || '{}');
+        var t = s.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+<div class="app" id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64"><path d="M30 10h4v8h8v4h-8v6c8 3 12 10 12 24H18c0-14 4-21 12-24v-6h-8v-4h8z" fill="#fff"/></svg>
+      </div>
+      <div>
+        <h1>GRANDMASTER AI</h1>
+        <p>Chess position analysis engine · analysis only, no opponent</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="pill busy" id="engine-pill" role="status"><i class="dot"></i><span id="engine-pill-text">Starting…</span></span>
+      <button class="btn small" id="btn-theme" type="button" aria-label="Switch light/dark theme">Dark</button>
+    </div>
+  </header>
+
+  <div id="fatal" class="fatal hidden" role="alert"></div>
+
+  <main class="layout" id="layout">
+
+    <!-- ================================================= LEFT ============ -->
+    <section class="col-left" aria-label="Board and clocks">
+      <div class="card board-wrap">
+        <div class="clocks" id="clocks-board">
+          <div class="clock w" id="clock-w"></div>
+          <div class="board-frame" id="board-frame" role="application" aria-label="Chessboard. Drag a piece or click a piece and then a square."></div>
+          <div class="clock b" id="clock-b"></div>
+        </div>
+
+        <div class="board-toolbar" role="toolbar" aria-label="Board tools">
+          <button class="btn" id="btn-undo" type="button" title="Undo (←)">↶ Undo</button>
+          <button class="btn" id="btn-redo" type="button" title="Redo (→)">↷ Redo</button>
+          <button class="btn" id="btn-flip" type="button" title="Flip board (F)">⇅ Flip</button>
+          <span class="spacer"></span>
+          <button class="btn" id="btn-reset" type="button" title="Start position">Reset</button>
+          <button class="btn" id="btn-clear" type="button" title="Empty board, then place pieces">Clear</button>
+          <button class="btn" id="btn-edit" type="button" title="Edit the position">✎ Edit position</button>
+        </div>
+        <p class="note" id="turn-note"></p>
+      </div>
+
+      <!-- position editor -->
+      <div class="card hidden" id="card-setup">
+        <h2>Position editor <span class="hint">pick a piece, tap squares — or drag pieces onto the board</span></h2>
+        <div class="palette" id="palette-w"></div>
+        <div class="palette" id="palette-b"></div>
+        <div class="btn-row" style="margin-bottom:8px">
+          <button class="btn small" id="tool-move" type="button">✋ Move pieces</button>
+          <button class="btn small" id="tool-erase" type="button">⌫ Eraser</button>
+          <button class="btn small" id="setup-clear" type="button">Clear board</button>
+          <button class="btn small" id="setup-start" type="button">Start position</button>
+        </div>
+        <div class="setup-grid">
+          <label class="field">Side to move
+            <select id="setup-turn"><option value="w">White</option><option value="b">Black</option></select>
+          </label>
+          <label class="field">En passant
+            <select id="setup-ep"><option value="-">none</option></select>
+          </label>
+          <label class="field">Halfmove clock
+            <input type="number" id="setup-half" min="0" max="150" value="0">
+          </label>
+          <label class="field">Move number
+            <input type="number" id="setup-full" min="1" max="999" value="1">
+          </label>
+        </div>
+        <div class="btn-row" style="margin-bottom:6px">
+          <label class="check"><input type="checkbox" id="cas-K"> White O-O</label>
+          <label class="check"><input type="checkbox" id="cas-Q"> White O-O-O</label>
+          <label class="check"><input type="checkbox" id="cas-k"> Black O-O</label>
+          <label class="check"><input type="checkbox" id="cas-q"> Black O-O-O</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="setup-apply" type="button">Apply &amp; analyse</button>
+          <button class="btn" id="setup-cancel" type="button">Cancel</button>
+        </div>
+        <div class="msg" id="setup-msg" role="status"></div>
+      </div>
+
+      <!-- time control -->
+      <div class="card" id="card-time">
+        <h2>Clock &amp; time control <span class="hint">click a time to type it · clocks are optional</span></h2>
+        <div class="tc-grid">
+          <label class="field">Preset
+            <select id="tc-preset"></select>
+          </label>
+          <label class="field">Hours <input type="number" id="tc-h" min="0" max="99" value="0"></label>
+          <label class="field">Minutes <input type="number" id="tc-m" min="0" max="999" value="5"></label>
+          <label class="field">Seconds <input type="number" id="tc-s" min="0" max="59" value="0"></label>
+          <label class="field">Increment (s) <input type="number" id="tc-inc" min="0" max="600" value="0"></label>
+        </div>
+        <div class="tc-actions">
+          <button class="btn" id="tc-apply" type="button" title="Set both clocks to this base time">Set both clocks</button>
+          <span class="muted" style="margin:0 4px">|</span>
+          <button class="btn primary" id="clk-start" type="button">▶ Start</button>
+          <button class="btn" id="clk-pause" type="button">⏸ Pause</button>
+          <button class="btn" id="clk-resume" type="button">⏯ Resume</button>
+          <button class="btn" id="clk-reset" type="button">↺ Reset</button>
+        </div>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="inc-always"> Add increment on every move, even when clocks are not running</label>
+        <p class="note">Increment changes apply immediately. While a clock runs, each move adds the increment to the player who moved and starts the opponent's clock.</p>
+      </div>
+    </section>
+
+    <!-- ================================================ RIGHT ============ -->
+    <section class="col-right" aria-label="Engine analysis">
+
+      <div class="card" id="card-eval">
+        <h2>Stockfish evaluation <span class="hint" id="eval-hint">White's point of view</span></h2>
+        <div class="eval-top">
+          <div class="eval-num" id="eval-num">—</div>
+          <div class="eval-class" id="eval-class">Waiting for engine</div>
+        </div>
+        <div class="evalbar stale" id="evalbar" role="img" aria-label="Evaluation bar">
+          <div class="white" id="evalbar-white"></div>
+          <div class="mid"></div>
+          <span class="lab l" id="lab-l"></span><span class="lab r" id="lab-r"></span>
+        </div>
+        <div class="eval-sub"><span>White</span><span id="eval-win"></span><span>Black</span></div>
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <div class="card" id="card-cands">
+        <h2>Top 4 candidate moves
+          <label class="check hint"><input type="checkbox" id="chk-arrows" checked> arrows on board</label>
+        </h2>
+        <div class="cands" id="cands"></div>
+        <p class="note" id="cands-note">All evaluations come straight from Stockfish (MultiPV&nbsp;4) and are shown from White's point of view. Explanations are summaries of the engine's line, not extra engine output.</p>
+      </div>
+
+      <div class="card" id="card-practical">
+        <h2>Position &amp; time context</h2>
+        <div class="split">
+          <div>
+            <p class="sub">Position <span class="tag-obj">OBJECTIVE</span></p>
+            <dl class="kv" id="kv-position"></dl>
+            <hr class="sep">
+            <p class="sub">Material balance</p>
+            <div id="material"></div>
+          </div>
+          <div>
+            <p class="sub">Clock <span class="tag-prac">PRACTICAL</span></p>
+            <dl class="kv" id="kv-time"></dl>
+          </div>
+        </div>
+        <ul class="notes" id="practical-notes"></ul>
+        <p class="note">The clock never changes Stockfish's score. "Practical" lines only describe how the time situation may matter for a human player.</p>
+      </div>
+    </section>
+
+    <!-- ============================================== BOTTOM ============= -->
+    <section class="bottom" aria-label="History, FEN and analysis controls">
+
+      <div class="card card-history">
+        <h2>Move history <span class="hint">click a move to jump to it</span></h2>
+        <div class="history" id="history"></div>
+      </div>
+
+      <div class="card card-fen">
+        <h2>FEN &amp; saved positions</h2>
+        <div class="fen-box">
+          <input type="text" id="fen-current" readonly aria-label="Current FEN" spellcheck="false">
+          <button class="btn" id="fen-copy" type="button">Copy</button>
+        </div>
+        <div class="info-grid" id="fen-info"></div>
+        <label class="field" style="margin-top:10px">Import FEN
+          <textarea id="fen-input" rows="2" spellcheck="false" placeholder="Paste a FEN here, e.g. rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"></textarea>
+        </label>
+        <div class="btn-row" style="margin-top:6px"><button class="btn primary" id="fen-load" type="button">Load FEN</button></div>
+        <div class="msg" id="fen-msg" role="status"></div>
+        <hr class="sep">
+        <div class="inline-input">
+          <input type="text" id="save-name" placeholder="Name this position" maxlength="40" aria-label="Position name">
+          <button class="btn" id="save-pos" type="button">Save</button>
+        </div>
+        <ul class="saved" id="saved"></ul>
+      </div>
+
+      <div class="card card-controls">
+        <h2>Analysis controls</h2>
+        <div class="btn-row">
+          <button class="btn primary" id="an-start" type="button">▶ Start</button>
+          <button class="btn" id="an-pause" type="button">⏸ Pause</button>
+          <button class="btn" id="an-resume" type="button">⏯ Resume</button>
+          <button class="btn danger" id="an-stop" type="button">⏹ Stop</button>
+        </div>
+        <div class="ctl-grid">
+          <label class="field wide">Mode
+            <select id="an-mode">
+              <option value="auto">Automatic — analyse after every position change</option>
+              <option value="manual">Manual — only when I press Start</option>
+            </select>
+          </label>
+          <label class="field">Depth limit
+            <select id="an-depth">
+              <option value="0">No limit</option>
+              <option value="10">10</option><option value="14">14</option><option value="18">18</option>
+              <option value="20">20</option><option value="24">24</option><option value="30">30</option>
+              <option value="40">40</option><option value="custom">Custom…</option>
+            </select>
+          </label>
+          <label class="field">Time limit
+            <select id="an-time">
+              <option value="1">1 second</option><option value="3">3 seconds</option><option value="5">5 seconds</option>
+              <option value="10">10 seconds</option><option value="30">30 seconds</option>
+              <option value="0">Unlimited</option><option value="custom">Custom…</option>
+            </select>
+          </label>
+          <label class="field hidden" id="an-depth-custom-wrap">Custom depth (1–60)
+            <input type="number" id="an-depth-custom" min="1" max="60" value="22">
+          </label>
+          <label class="field hidden" id="an-time-custom-wrap">Custom seconds
+            <input type="number" id="an-time-custom" min="1" max="3600" value="20">
+          </label>
+        </div>
+        <div class="status-line" id="an-status" role="status">Engine starting…</div>
+        <p class="note">Analysis stops at whichever limit comes first. Pause keeps the current results on screen; Resume continues from the engine's hash. Pause also holds back automatic analysis until you resume. Unlimited time with no depth limit runs until you press Stop.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    GRANDMASTER AI · Stockfish (GPLv3) running locally in your browser via WebAssembly · rules by chess.js · no data leaves your device
+  </footer>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
