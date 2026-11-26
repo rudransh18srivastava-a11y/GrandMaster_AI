@@ -1,0 +1,17 @@
+{
+  "name": "grandmaster-ai",
+  "version": "1.0.0",
+  "description": "GRANDMASTER AI — a chess position analysis engine (Stockfish WASM, MultiPV 4, editable clocks). Analysis only: no opponent, no bot.",
+  "type": "module",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "setup": "node scripts/setup-engine.js",
+    "start": "node scripts/serve.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "chess.js": "^1.0.0",
+    "stockfish": ">=18.0.0"
+  }
+}
